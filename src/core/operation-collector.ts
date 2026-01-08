@@ -38,7 +38,7 @@ interface PathItemLike {
   options?: OperationLike;
 }
 
-function extractSchemaName(schema: SchemaLike | undefined): string | null {
+export function extractSchemaName(schema: SchemaLike | undefined): string | null {
   if (!schema) return null;
 
   if (schema.$ref && typeof schema.$ref === 'string') {

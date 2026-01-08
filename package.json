@@ -1,7 +1,7 @@
 {
   "name": "hey-api-playwright",
-  "version": "0.1.1",
-  "description": "Generate Playwright E2E test fixtures and route mocks from OpenAPI specifications",
+  "version": "0.1.2",
+  "description": "Playwright integration for hey-api",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "type": "module",
@@ -34,7 +34,7 @@
     "@playwright/test": ">=1.40.0"
   },
   "dependencies": {
-    "hey-api-builders": "github:JeffreyNijs/hey-api-builders"
+    "hey-api-builders": "^1.0.0"
   },
   "devDependencies": {
     "@hey-api/openapi-ts": "^0.61.0",

@@ -1,6 +1,6 @@
 import type { PlaywrightPluginConfig, OperationMeta } from '../types';
 import { resolveConfig } from './config';
-import { collectOperations } from '../core/operation-collector';
+import { adaptOpenApiTsOperation } from '../core/openapi-ts-adapter';
 import { generateFixtures, generateFixtureTypes } from '../generators/playwright-fixture-generator';
 import { generateRouteHandlers } from '../generators/playwright-route-generator';
 import { generateMockBuilders } from '../generators/playwright-builder-generator';
@@ -10,9 +10,9 @@ interface SchemaEvent {
   schema: Record<string, unknown>;
 }
 
-interface PathEvent {
-  path: string;
-  item: Record<string, unknown>;
+// Operation event from openapi-ts
+interface OperationEvent {
+  operation: any; // Using any as the structure is complex and internal to openapi-ts
 }
 
 interface PluginFile {
@@ -24,7 +24,10 @@ interface PluginContext {
   output: string;
   config: PlaywrightPluginConfig;
   createFile: (options: { id: string; path: string }) => PluginFile;
-  forEach: (type: 'schema' | 'path', callback: (event: SchemaEvent | PathEvent) => void) => void;
+  forEach: (
+    type: 'schema' | 'operation',
+    callback: (event: SchemaEvent | OperationEvent) => void
+  ) => void;
 }
 
 export type PlaywrightHandler = (context: { plugin: PluginContext }) => void;
@@ -54,23 +57,29 @@ function getBuilderImports(operations: OperationMeta[]): Set<string> {
   return imports;
 }
 
-export const handler: PlaywrightHandler = ({ plugin }) => {
+export const handler: PlaywrightHandler = (context) => {
+  const { plugin } = context;
   const config = resolveConfig(plugin.config);
 
   const rawSchemas: Record<string, Record<string, unknown>> = {};
-  const rawPaths: Record<string, Record<string, unknown>> = {};
 
   plugin.forEach('schema', (event) => {
     const schemaEvent = event as SchemaEvent;
     rawSchemas[schemaEvent.name] = schemaEvent.schema;
   });
 
-  plugin.forEach('path', (event) => {
-    const pathEvent = event as PathEvent;
-    rawPaths[pathEvent.path] = pathEvent.item;
+  const operations: OperationMeta[] = [];
+
+  // Use 'any' cast to support 'operation' event type if strict typing complains
+  (plugin as any).forEach('operation', (event: OperationEvent) => {
+    if (event.operation) {
+      const op = adaptOpenApiTsOperation(event.operation, rawSchemas);
+      operations.push(op);
+    }
   });
 
-  const operations = collectOperations(rawPaths, rawSchemas);
+  operations.sort((a, b) => a.operationId.localeCompare(b.operationId));
+
   const file = plugin.createFile({ id: plugin.name, path: config.output });
 
   let output = generateImports();
@@ -79,7 +88,7 @@ export const handler: PlaywrightHandler = ({ plugin }) => {
   if (builderImports.size > 0) {
     output = output.replace(
       "import * as builders from './builders.gen';",
-      `const { ${Array.from(builderImports).join(', ')} } = builders;`
+      `import { ${Array.from(builderImports).join(', ')} } from './builders.gen';`
     );
   }
 
