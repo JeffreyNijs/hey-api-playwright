@@ -42,10 +42,36 @@ function extractSchemaName(schema: SchemaLike | undefined): string | null {
   if (!schema) return null;
 
   if (schema.$ref && typeof schema.$ref === 'string') {
-    return schema.$ref.replace('#/components/schemas/', '');
+    // Handle standard OpenAPI refs
+    if (schema.$ref.startsWith('#/components/schemas/')) {
+      return schema.$ref.replace('#/components/schemas/', '');
+    }
+    // Handle specific openapi-ts refs if any, or just return the last segment
+    const parts = schema.$ref.split('/');
+    return parts[parts.length - 1] || null;
+  }
+
+  // Handle inline schema with title as implicit name (often used by openapi-ts)
+  if (typeof schema.title === 'string') {
+    return schema.title || null;
   }
 
   return null;
+}
+
+function findJsonContent(content: Record<string, { schema?: SchemaLike }> | undefined) {
+  if (!content) return undefined;
+
+  // prioritized search
+  if (content['application/json']) return content['application/json'];
+
+  // Fuzzy search for other json types (e.g. application/vnd.api+json)
+  const jsonKey = Object.keys(content).find(
+    (k) => k.toLowerCase().includes('application/') && k.toLowerCase().includes('json')
+  );
+  if (jsonKey) return content[jsonKey];
+
+  return undefined;
 }
 
 function collectResponses(
@@ -63,8 +89,7 @@ function collectResponses(
 
     if (isNaN(statusCode)) continue;
 
-    const content = response.content;
-    const jsonContent = content?.['application/json'];
+    const jsonContent = findJsonContent(response.content);
     const schema = jsonContent?.schema;
 
     const schemaName = extractSchemaName(schema);
