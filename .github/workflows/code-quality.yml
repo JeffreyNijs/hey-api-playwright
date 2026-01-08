@@ -1,0 +1,118 @@
+name: Code Quality
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  quality:
+    name: Code Quality Checks
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Check for TODO/FIXME comments
+      - name: Check for TODO/FIXME
+        run: |
+          echo "Checking for TODO/FIXME comments..."
+          if grep -r "TODO\|FIXME" src/ --exclude-dir=node_modules --exclude-dir=dist; then
+            echo "⚠️ Found TODO/FIXME comments. Consider addressing them."
+          else
+            echo "✅ No TODO/FIXME comments found"
+          fi
+        continue-on-error: true
+
+      # Check for console.log statements
+      - name: Check for console.log
+        run: |
+          echo "Checking for console.log statements..."
+          if grep -r "console\.log" src/ --exclude-dir=node_modules --exclude-dir=dist --exclude="*.test.ts"; then
+            echo "⚠️ Found console.log statements in source code"
+            exit 1
+          else
+            echo "✅ No console.log in source code"
+          fi
+
+      # Check for outdated dependencies (info only)
+      - name: Check for outdated dependencies
+        run: |
+          echo "Checking for outdated dependencies..."
+          npm outdated || true
+        continue-on-error: true
+
+      # Check for security vulnerabilities
+      - name: Security audit
+        run: npm audit --production
+        continue-on-error: true
+
+      # Check bundle size
+      - name: Build and check size
+        run: |
+          npm run build
+          echo "Build size:"
+          du -sh dist/
+          echo "Detailed breakdown:"
+          du -h dist/* | sort -h
+
+  # Test coverage reporting
+  coverage:
+    name: Test Coverage
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests with coverage
+        run: npm test -- --run --coverage
+
+      - name: Coverage report
+        run: |
+          echo "Coverage Summary:"
+          cat coverage/coverage-summary.json || echo "No coverage summary found"
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: ./coverage/coverage-final.json
+          fail_ci_if_error: false
+
+  # Dependency review (PRs only)
+  dependency-review:
+    name: Dependency Review
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Dependency Review
+        uses: actions/dependency-review-action@v4
+        with:
+          fail-on-severity: moderate
