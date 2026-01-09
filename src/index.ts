@@ -2,8 +2,13 @@ import type { PlaywrightPluginConfig } from './types';
 import { handler } from './plugin/handler';
 import { resolveConfig, validateConfig } from './plugin/config';
 
-export function playwrightPlugin(config: PlaywrightPluginConfig = {}) {
-  const errors = validateConfig(config);
+export function playwrightPlugin(config?: PlaywrightPluginConfig): {
+  name: 'hey-api-playwright';
+  output: string;
+  config: Required<PlaywrightPluginConfig>;
+  handler: typeof handler;
+} {
+  const errors = config ? validateConfig(config) : [];
   if (errors.length > 0) {
     throw new Error(`Invalid playwright plugin config: ${errors.join(', ')}`);
   }

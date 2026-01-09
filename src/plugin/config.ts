@@ -1,7 +1,7 @@
 import type { PlaywrightPluginConfig } from '../types';
 
 export const defaultConfig: Required<PlaywrightPluginConfig> = {
-  output: 'playwright-mocks.gen.ts',
+  output: 'playwright-mocks',
   generateBuilders: true,
   generateErrorMocks: true,
   baseUrlPattern: '**/api/**',

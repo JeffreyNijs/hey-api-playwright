@@ -60,7 +60,7 @@ export default defineConfig({
 
 | Option | Type | Default | Description |
 | :--- | :--- | :--- | :--- |
-| `output` | `string` | `'playwright-mocks.gen.ts'` | Path to the generated output file relative to the `output` directory. |
+| `output` | `string` | `'playwright-mocks'` | Path to the generated output file relative to the `output` directory. |
 | `generateBuilders` | `boolean` | `true` | Whether to generate fluent builder classes. |
 | `generateErrorMocks` | `boolean` | `true` | Whether to generate mocks for error responses (e.g. 4xx, 5xx). |
 | `generateMsw` | `boolean` | `false` | Whether to generate MSW handlers. |
