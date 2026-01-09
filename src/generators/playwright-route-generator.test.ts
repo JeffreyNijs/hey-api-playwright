@@ -170,5 +170,28 @@ describe('playwright-route-generator', () => {
 
       expect(result).toContain('page.route(/.*\\/api\\/users\\/([^/]+)(\\?.*)?$/');
     });
+    it('supports optional matcher in route handler', () => {
+      const operations: OperationMeta[] = [
+        createOperation({
+          responses: [
+            {
+              statusCode: 200,
+              schemaName: 'UserList',
+              schema: null,
+              isSuccess: true,
+              isError: false,
+            },
+          ],
+        }),
+      ];
+
+      const result = generateRouteHandlers(operations, {
+        baseUrlPattern: '**',
+        generateErrorMocks: true,
+      });
+
+      expect(result).toContain('options?: RouteHandlerOptions');
+      expect(result).toContain('if (options?.matcher && !options.matcher(route.request()))');
+    });
   });
 });

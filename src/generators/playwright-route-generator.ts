@@ -14,7 +14,15 @@ export function generateRouteHandlers(
   operations: OperationMeta[],
   options: RouteGeneratorOptions
 ): string {
-  let code = '/**\n * Route handler functions for mocking API responses\n */\n\n';
+  let code = `/**
+ * Route handler functions for mocking API responses
+ */
+
+export interface RouteHandlerOptions {
+  matcher?: (request: Request) => boolean;
+}
+
+`;
 
   for (const operation of operations) {
     code += generateRouteHandler(operation, options);
@@ -65,10 +73,15 @@ function generateEmptyRouteHandler(functionName: string, method: string, regexSt
   return `
 export async function ${functionName}(
   page: Page,
-  status = 200
+  status = 200,
+  options?: RouteHandlerOptions
 ): Promise<void> {
   await page.route(/${regexStr}/, async (route) => {
     if (route.request().method().toLowerCase() !== '${method}') {
+      await route.fallback();
+      return;
+    }
+    if (options?.matcher && !options.matcher(route.request())) {
       await route.fallback();
       return;
     }
@@ -94,10 +107,15 @@ function generateSuccessHandler(
   return `
 export async function ${functionName}(
   page: Page,
-  data?: Partial<types.${response.schemaName}>
+  data?: Partial<types.${response.schemaName}>,
+  options?: RouteHandlerOptions
 ): Promise<void> {
   await page.route(/${regexStr}/, async (route) => {
     if (route.request().method().toLowerCase() !== '${method}') {
+      await route.fallback();
+      return;
+    }
+    if (options?.matcher && !options.matcher(route.request())) {
       await route.fallback();
       return;
     }
@@ -124,10 +142,15 @@ function generateErrorHandler(
   return `
 export async function ${errorFunctionName}(
   page: Page,
-  data?: Partial<types.${response.schemaName}>
+  data?: Partial<types.${response.schemaName}>,
+  options?: RouteHandlerOptions
 ): Promise<void> {
   await page.route(/${regexStr}/, async (route) => {
     if (route.request().method().toLowerCase() !== '${method}') {
+      await route.fallback();
+      return;
+    }
+    if (options?.matcher && !options.matcher(route.request())) {
       await route.fallback();
       return;
     }

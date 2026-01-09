@@ -132,7 +132,28 @@ await new ViewUsersMock().apply(page, '**/api/v1/users');
 await new ViewUsersMock().apply(page, /.*\/api\/v1\/users(\?.*)?$/);
 ```
 
-### 4. Global Fixtures
+### 4. Conditional Mocking
+You can pass an optional `matcher` function to dynamically determine if a request should be mocked. This is useful for conditional logic, such as returning different responses based on query parameters.
+
+```typescript
+import { mockSearchCollections } from './generated/playwright-mocks.gen';
+
+// Mock specific search query
+await mockSearchCollections(page, {
+  items: [itemA]
+}, {
+  matcher: (request) => request.url().includes('q=termA')
+});
+
+// Mock another search query
+await mockSearchCollections(page, {
+  items: [itemB]
+}, {
+  matcher: (request) => request.url().includes('q=termB')
+});
+```
+
+### 5. Global Fixtures
 
 You can combine these with Playwright's `test` fixtures to set up common mocks for all tests.
 
@@ -153,7 +174,7 @@ export const test = base.extend({
 });
 ```
 
-### 5. MSW Integration
+### 6. MSW Integration
 
 You can also generate [MSW](https://mswjs.io/) handlers for use in component tests (e.g. Vitest, Jest).
 
