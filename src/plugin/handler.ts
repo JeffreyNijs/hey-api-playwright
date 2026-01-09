@@ -4,6 +4,7 @@ import { adaptOpenApiTsOperation } from '../core/openapi-ts-adapter';
 import { generateFixtures, generateFixtureTypes } from '../generators/playwright-fixture-generator';
 import { generateRouteHandlers } from '../generators/playwright-route-generator';
 import { generateMockBuilders } from '../generators/playwright-builder-generator';
+import { generateMswHandlers } from '../generators/msw-handler-generator';
 
 interface SchemaEvent {
   name: string;
@@ -83,6 +84,9 @@ export const handler: PlaywrightHandler = (context) => {
   const file = plugin.createFile({ id: plugin.name, path: config.output });
 
   let output = generateImports();
+  if (config.generateMsw) {
+    output = `import { http, HttpResponse } from 'msw';\n` + output;
+  }
 
   const builderImports = getBuilderImports(operations);
   if (builderImports.size > 0) {
@@ -107,6 +111,12 @@ export const handler: PlaywrightHandler = (context) => {
     output += generateMockBuilders(operations, {
       baseUrlPattern: config.baseUrlPattern,
       generateErrorMocks: config.generateErrorMocks,
+    });
+  }
+
+  if (config.generateMsw) {
+    output += generateMswHandlers(operations, {
+      baseUrlPattern: config.baseUrlPattern,
     });
   }
 

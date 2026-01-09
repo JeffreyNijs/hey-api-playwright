@@ -1,37 +1,47 @@
 # hey-api-playwright
 
-Generate type-safe Playwright E2E test fixtures and route mocks from your OpenAPI specification.
+Generate type-safe Playwright E2E test fixtures, route mocks, and consistent data builders from your OpenAPI specification.
+
+This plugin for `@hey-api/openapi-ts` bridges the gap between your API definition and Playwright tests, ensuring your test data always matches your API schema.
+
+## Features
+
+- **Automated Route Mocking**: Generates `page.route()` helpers for every API operation.
+- **Type-safe Fixtures**: Mock data is validated against your OpenAPI schemas using Zod.
+- **Fluent Builders**: Override default mock data easily with a chainable `.with()` API.
+- **Strict Mode Compatibility**: ensuring your tests never drift from the API contract.
+- **Integration Ready**: Works seamlessly with `@playwright/test`.
 
 ## Installation
 
 ```bash
-npm install hey-api-playwright --save-dev
+npm install hey-api-playwright hey-api-builders --save-dev
 ```
 
 ### Peer Dependencies
 
-This package requires:
+Ensure you have the following installed:
 
 - `@hey-api/openapi-ts` >= 0.61.0
 - `@playwright/test` >= 1.40.0
-- `hey-api-builders` >= 0.1.0
 
-## Usage
+## Configuration
 
-### Configuration
-
-Add the plugin to your `openapi-ts.config.ts`:
+Add the plugin to your `openapi-ts.config.ts`. You must also include `hey-api-builders` as it powers the data generation.
 
 ```typescript
 import { defineConfig } from '@hey-api/openapi-ts';
 import playwrightPlugin from 'hey-api-playwright';
+import { buildersPlugin } from 'hey-api-builders';
 
 export default defineConfig({
   input: './openapi.yaml',
   output: './src/generated',
   plugins: [
     '@hey-api/typescript',
-    'hey-api-builders',
+    buildersPlugin({
+      schema: './src/generated/schemas.ts' // Optional: if using schema references
+    }),
     playwrightPlugin({
       generateBuilders: true,
       generateErrorMocks: true,
@@ -40,72 +50,98 @@ export default defineConfig({
 });
 ```
 
-### Generated Output
+Run the generator:
 
-The plugin generates a `playwright-mocks.gen.ts` file with:
-
-#### 1. Static Fixtures
-
-```typescript
-export const fixtures = {
-  getUsersResponse: { users: [{ id: "550e8400-...", name: "aaaaa" }] },
-  getUsersError404: { message: "Not found", code: "NOT_FOUND" },
-};
+```bash
+npx openapi-ts
 ```
 
-#### 2. Route Handlers
+This will produce a `playwright-mocks.gen.ts` file in your output directory.
 
-Quick one-liners for common mocking scenarios:
+## Usage
+
+### 1. Basic Route Mocking
+
+For simple tests where you just need the API to return a valid 200 OK response with default data:
 
 ```typescript
-import { mockGetUsers, mockGetUsersError404 } from './generated/playwright-mocks.gen';
+import { test, expect } from '@playwright/test';
+import { mockViewUsers, mockCreateUser } from './generated/playwright-mocks.gen';
 
-test('shows user list', async ({ page }) => {
-  await mockGetUsers(page);
+test('renders user list', async ({ page }) => {
+  // Mocks GET /users with default generated data matching the schema
+  await mockViewUsers(page);
+  
   await page.goto('/users');
   await expect(page.getByRole('list')).toBeVisible();
 });
-
-test('handles 404', async ({ page }) => {
-  await mockGetUsersError404(page);
-  await page.goto('/users');
-  await expect(page.getByText('Not found')).toBeVisible();
-});
 ```
 
-#### 3. Fluent Builders
+### 2. Fluent Builders (Recommended)
 
-For complex test scenarios with custom data:
+For more complex scenarios where you need specific data states, use the generated Mock classes with the Builder pattern. This allows you to override specific fields while keeping the rest compliant with the schema.
 
 ```typescript
-import { GetUsersMock } from './generated/playwright-mocks.gen';
+import { test, expect } from '@playwright/test';
+import { ViewUsersMock } from './generated/playwright-mocks.gen';
 
-test('handles empty state', async ({ page }) => {
-  await new GetUsersMock()
-    .with({ users: [] })
-    .apply(page);
-  
+test('renders specific users', async ({ page }) => {
+  // Override specific fields, rest are auto-generated
+  await new ViewUsersMock()
+    .with({
+      items: [
+        { id: 'user-123', name: 'Alice', role: 'ADMIN' },
+        { id: 'user-456', name: 'Bob', role: 'USER' }
+      ],
+      meta: { total: 2 }
+    })
+    .apply(page); // Applies the route handler
+    
   await page.goto('/users');
-  await expect(page.getByText('No users')).toBeVisible();
+  await expect(page.getByText('Alice')).toBeVisible();
+  await expect(page.getByText('Bob')).toBeVisible();
 });
 ```
 
-## Configuration Options
+### 3. Pattern Matching
 
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `output` | `string` | `'playwright-mocks.gen.ts'` | Output file path |
-| `generateBuilders` | `boolean` | `true` | Generate fluent builder classes |
-| `generateErrorMocks` | `boolean` | `true` | Generate 4xx/5xx error fixtures |
-| `baseUrlPattern` | `string` | `'**'` | Base URL pattern for route matching |
-| `mockStrategy` | `'static' \| 'zod'` | `'static'` | Mock data generation strategy |
+By default, mocks match the path defined in OpenAPI. You can override the matching logic (e.g., regex for query params) when applying the mock.
+
+```typescript
+// Match strict URL
+await new ViewUsersMock().apply(page, '**/api/v1/users');
+
+// Match with Regex (useful for query params)
+await new ViewUsersMock().apply(page, /.*\/api\/v1\/users(\?.*)?$/);
+```
+
+### 4. Global Fixtures
+
+You can combine these with Playwright's `test` fixtures to set up common mocks for all tests.
+
+```typescript
+// fixtures.ts
+import { test as base } from '@playwright/test';
+import { ViewMeMock } from './generated/playwright-mocks.gen';
+
+export const test = base.extend({
+  page: async ({ page }, use) => {
+    // Gloablly mock the "Get Current User" endpoint
+    await new ViewMeMock()
+      .with({ id: 'test-user', email: 'test@example.com' })
+      .apply(page);
+      
+    await use(page);
+  },
+});
+```
 
 ## How It Works
 
-1. Parses your OpenAPI spec using `@hey-api/openapi-ts`
-2. Extracts operations (paths + methods) and their response schemas
-3. Uses `hey-api-builders` to generate typed mock data
-4. Outputs Playwright-specific route handlers and fixtures
+1. **Schema Parsing**: Parses your OpenAPI spec to understand all available operations and data models.
+2. **Builder Generation**: Uses `hey-api-builders` to create `Builder` classes for every response schema. These builders can generate valid mock data instantly.
+3. **Route Generation**: Creates `Mock` classes that wrap Playwright's `page.route()`.
+4. **Runtime Validation**: When you call `.with()`, TypeScript ensures you only pass valid fields. The underlying Zod schemas ensure the final response is valid.
 
 ## License
 

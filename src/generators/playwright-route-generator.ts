@@ -1,6 +1,6 @@
 import type { OperationMeta } from '../types';
 import {
-  openApiPathToGlob,
+  openApiPathToRegex,
   methodToFunctionName,
   operationToFixtureName,
 } from '../core/path-transformer';
@@ -28,7 +28,8 @@ function generateRouteHandler(operation: OperationMeta, options: RouteGeneratorO
   const { baseUrlPattern } = options;
 
   const functionName = methodToFunctionName(method, operationId);
-  const globPattern = openApiPathToGlob(path, baseUrlPattern);
+  const regexPattern = openApiPathToRegex(path, baseUrlPattern);
+  const regexStr = regexPattern.source.replace(/\$$/g, '(\\?.*)?$');
 
   const successResponses = responses.filter((r) => r.isSuccess);
   const errorResponses = responses.filter((r) => r.isError);
@@ -36,12 +37,12 @@ function generateRouteHandler(operation: OperationMeta, options: RouteGeneratorO
   const primaryResponse = successResponses[0];
 
   if (!primaryResponse?.schemaName) {
-    return generateEmptyRouteHandler(functionName, method, globPattern);
+    return generateEmptyRouteHandler(functionName, method, regexStr);
   }
 
   let code = '';
 
-  code += generateSuccessHandler(functionName, method, globPattern, operationId, {
+  code += generateSuccessHandler(functionName, method, regexStr, operationId, {
     statusCode: primaryResponse.statusCode,
     schemaName: primaryResponse.schemaName,
   });
@@ -50,7 +51,7 @@ function generateRouteHandler(operation: OperationMeta, options: RouteGeneratorO
     for (const errorResponse of errorResponses) {
       if (!errorResponse.schemaName) continue;
 
-      code += generateErrorHandler(functionName, method, globPattern, operationId, {
+      code += generateErrorHandler(functionName, method, regexStr, operationId, {
         statusCode: errorResponse.statusCode,
         schemaName: errorResponse.schemaName,
       });
@@ -60,22 +61,21 @@ function generateRouteHandler(operation: OperationMeta, options: RouteGeneratorO
   return code;
 }
 
-function generateEmptyRouteHandler(
-  functionName: string,
-  method: string,
-  globPattern: string
-): string {
+function generateEmptyRouteHandler(functionName: string, method: string, regexStr: string): string {
   return `
 export async function ${functionName}(
   page: Page,
   status = 200
 ): Promise<void> {
-  await page.route('${globPattern}', async (route) => {
+  await page.route(/${regexStr}/, async (route) => {
     if (route.request().method().toLowerCase() !== '${method}') {
       await route.fallback();
       return;
     }
-    await route.fulfill({ status });
+    await route.fulfill({
+      status,
+      body: status === 204 ? undefined : '{}',
+    });
   });
 }
 
@@ -85,7 +85,7 @@ export async function ${functionName}(
 function generateSuccessHandler(
   functionName: string,
   method: string,
-  globPattern: string,
+  regexStr: string,
   operationId: string,
   response: { statusCode: number; schemaName: string }
 ): string {
@@ -96,7 +96,7 @@ export async function ${functionName}(
   page: Page,
   data?: Partial<types.${response.schemaName}>
 ): Promise<void> {
-  await page.route('${globPattern}', async (route) => {
+  await page.route(/${regexStr}/, async (route) => {
     if (route.request().method().toLowerCase() !== '${method}') {
       await route.fallback();
       return;
@@ -114,7 +114,7 @@ export async function ${functionName}(
 function generateErrorHandler(
   functionName: string,
   method: string,
-  globPattern: string,
+  regexStr: string,
   operationId: string,
   response: { statusCode: number; schemaName: string }
 ): string {
@@ -126,7 +126,7 @@ export async function ${errorFunctionName}(
   page: Page,
   data?: Partial<types.${response.schemaName}>
 ): Promise<void> {
-  await page.route('${globPattern}', async (route) => {
+  await page.route(/${regexStr}/, async (route) => {
     if (route.request().method().toLowerCase() !== '${method}') {
       await route.fallback();
       return;

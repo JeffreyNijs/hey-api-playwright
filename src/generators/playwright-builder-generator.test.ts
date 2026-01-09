@@ -108,7 +108,9 @@ describe('playwright-builder-generator', () => {
       });
 
       expect(result).toContain('async apply(page: Page');
-      expect(result).toContain("pattern = '**/api/users'");
+      expect(result).toContain("static readonly globPattern = '**/api/users'");
+      expect(result).toContain('static readonly pattern = /.*\\/api\\/users(\\?.*)?$/');
+      expect(result).toContain('= GetUsersMock.pattern');
       expect(result).toContain('page.route(pattern');
       expect(result).toContain('route.fulfill');
     });
@@ -180,7 +182,7 @@ describe('playwright-builder-generator', () => {
         generateErrorMocks: true,
       });
 
-      expect(result).toContain("pattern = 'https://api.example.com/api/users'");
+      expect(result).toContain("static readonly globPattern = 'https://api.example.com/api/users'");
     });
   });
 });

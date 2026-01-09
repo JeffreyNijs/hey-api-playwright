@@ -1,5 +1,9 @@
 import type { OperationMeta } from '../types';
-import { openApiPathToGlob, operationToFixtureName } from '../core/path-transformer';
+import {
+  openApiPathToGlob,
+  openApiPathToRegex,
+  operationToFixtureName,
+} from '../core/path-transformer';
 
 export interface BuilderGeneratorOptions {
   baseUrlPattern: string;
@@ -28,6 +32,7 @@ function generateOperationBuilders(
   const { baseUrlPattern, generateErrorMocks } = options;
 
   const globPattern = openApiPathToGlob(path, baseUrlPattern);
+  const regexPattern = openApiPathToRegex(path, baseUrlPattern);
   let code = '';
 
   for (const response of responses) {
@@ -43,6 +48,7 @@ function generateOperationBuilders(
       fixtureName,
       method,
       globPattern,
+      regexPattern,
       response.statusCode
     );
   }
@@ -66,11 +72,20 @@ function generateBuilderClass(
   fixtureName: string,
   method: string,
   globPattern: string,
+  regexPattern: RegExp,
   statusCode: number
 ): string {
+  // Escape the regex for embedding in a template literal
+  const regexStr = regexPattern.source;
   return `
 export class ${className} {
   private data: types.${schemaName};
+
+  /** Glob pattern for this endpoint (may match too broadly) */
+  static readonly globPattern = '${globPattern}';
+
+  /** Precise regex pattern for this endpoint (handles query params) */
+  static readonly pattern = /${regexStr.replace(/\$$/g, '(\\?.*)?$')}/;
 
   constructor() {
     this.data = structuredClone(fixtures.${fixtureName});
@@ -93,8 +108,10 @@ export class ${className} {
 
   /**
    * Apply this mock to a Playwright page
+   * @param page - The Playwright page
+   * @param pattern - Route pattern (uses static pattern by default)
    */
-  async apply(page: Page, pattern = '${globPattern}'): Promise<void> {
+  async apply(page: Page, pattern: string | RegExp = ${className}.pattern): Promise<void> {
     const data = this.data;
     await page.route(pattern, async (route) => {
       if (route.request().method().toLowerCase() !== '${method}') {

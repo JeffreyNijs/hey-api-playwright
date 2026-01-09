@@ -25,6 +25,7 @@ export interface PlaywrightPluginConfig {
   generateErrorMocks?: boolean;
   baseUrlPattern?: string;
   mockStrategy?: 'static' | 'zod';
+  generateMsw?: boolean;
 }
 
 export interface PlaywrightPluginContext {

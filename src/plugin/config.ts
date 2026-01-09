@@ -4,8 +4,9 @@ export const defaultConfig: Required<PlaywrightPluginConfig> = {
   output: 'playwright-mocks.gen.ts',
   generateBuilders: true,
   generateErrorMocks: true,
-  baseUrlPattern: '**',
+  baseUrlPattern: '**/api/**',
   mockStrategy: 'static',
+  generateMsw: false,
 };
 
 export function resolveConfig(

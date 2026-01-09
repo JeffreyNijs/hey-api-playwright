@@ -35,7 +35,7 @@ describe('playwright-route-generator', () => {
       });
 
       expect(result).toContain('export async function mockGetUsers');
-      expect(result).toContain("page.route('**/api/users'");
+      expect(result).toContain('page.route(/.*\\/api\\/users(\\?.*)?$/');
       expect(result).toContain('Partial<types.UserList>');
       expect(result).toContain('fixtures.getUsersResponse');
     });
@@ -168,7 +168,7 @@ describe('playwright-route-generator', () => {
         generateErrorMocks: true,
       });
 
-      expect(result).toContain("'**/api/users/*'");
+      expect(result).toContain('page.route(/.*\\/api\\/users\\/([^/]+)(\\?.*)?$/');
     });
   });
 });

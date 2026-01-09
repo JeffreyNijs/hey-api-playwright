@@ -9,12 +9,16 @@ export function openApiPathToGlob(path: string, basePattern = '**'): string {
   return `${basePattern}${globPath}`;
 }
 
-export function openApiPathToRegex(path: string): RegExp {
+export function openApiPathToRegex(path: string, basePattern = '**'): RegExp {
+  const normalizedBase = basePattern.replace(/\/+$/, ''); // Remove trailing slashes
+  const escapedBase = normalizedBase.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&');
+  const regexBase = escapedBase.replace(/\\\*\\\*/g, '.*').replace(/\\\*/g, '[^/]*');
+
   const regexPath = path
-    .replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    .replace(/[.*+?^${}()|[\]\\/]/g, '\\$&')
     .replace(/\\{([^}]+)\\}/g, '([^/]+)');
 
-  return new RegExp(`${regexPath}$`);
+  return new RegExp(`${regexBase}${regexPath}$`);
 }
 
 export function extractPathParams(path: string): string[] {
@@ -25,7 +29,7 @@ export function extractPathParams(path: string): string[] {
 export function transformPath(path: string, basePattern = '**'): PathPattern {
   return {
     glob: openApiPathToGlob(path, basePattern),
-    regex: openApiPathToRegex(path),
+    regex: openApiPathToRegex(path, basePattern),
     params: extractPathParams(path),
   };
 }
