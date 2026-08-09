@@ -1,0 +1,26 @@
+name: Deprecate npm package
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deprecate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.18.0
+          registry-url: https://registry.npmjs.org
+      - run: npm whoami
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      - name: Deprecate every published version
+        run: >-
+          npm deprecate 'hey-api-playwright@*'
+          'Deprecated: use the built-in Hey API MSW plugin with @msw/playwright instead.
+          Migration: https://github.com/JeffreyNijs/hey-api-playwright#readme'
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

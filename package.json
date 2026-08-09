@@ -1,7 +1,8 @@
 {
   "name": "hey-api-playwright",
   "version": "0.3.0",
-  "description": "Playwright integration for hey-api",
+  "description": "DEPRECATED: use Hey API's MSW plugin with @msw/playwright.",
+  "private": true,
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "type": "module",
