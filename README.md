@@ -1,220 +1,130 @@
-# hey-api-playwright
+# hey-api-playwright (deprecated)
 
-[![CI](https://github.com/JeffreyNijs/hey-api-playwright/actions/workflows/ci.yml/badge.svg)](https://github.com/JeffreyNijs/hey-api-playwright/actions/workflows/ci.yml)
-[![Code Quality](https://github.com/JeffreyNijs/hey-api-playwright/actions/workflows/code-quality.yml/badge.svg)](https://github.com/JeffreyNijs/hey-api-playwright/actions/workflows/code-quality.yml)
-[![npm version](https://badge.fury.io/js/hey-api-playwright.svg)](https://badge.fury.io/js/hey-api-playwright)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+> **This package was deprecated on 2026-08-09 and this repository is archived.**
+> Use Hey API's built-in [`msw` plugin](https://heyapi.dev/docs/openapi/typescript/plugins/msw)
+> with [`@msw/playwright`](https://github.com/mswjs/playwright) instead.
 
-Generate type-safe Playwright E2E test fixtures, route mocks, and consistent data builders from your OpenAPI specification.
+`hey-api-playwright` will not receive a compatibility release for current Hey API versions.
+Existing published versions remain available so installations stay reproducible, but they should
+not be used for new work.
 
-This plugin for `@hey-api/openapi-ts` bridges the gap between your API definition and Playwright tests, ensuring your test data always matches your API schema.
+## Why it was retired
 
-## Features
+The package duplicated responsibilities that now have maintained upstream implementations:
 
-- **Automated Route Mocking**: Generates `page.route()` helpers for every API operation.
-- **Type-safe Fixtures**: Mock data is validated against your OpenAPI schemas using Zod.
-- **Fluent Builders**: Override default mock data easily with a chainable `.with()` API.
-- **Strict Mode Compatibility**: ensuring your tests never drift from the API contract.
-- **Integration Ready**: Works seamlessly with `@playwright/test`.
-- **MSW Support**: Generates compatible MSW handlers for component testing.
+- Hey API generates typed MSW handlers directly from OpenAPI operations.
+- Hey API's Faker plugin generates schema-constrained request, response, and model factories.
+- `@msw/playwright` runs ordinary MSW handlers through Playwright's network routing.
 
-## Installation
+Maintaining a second generator for route matching, mock bodies, and response types would add drift
+without adding a durable capability. Version 0.3.0 also targets an obsolete custom-plugin API and is
+not compatible with current `@hey-api/openapi-ts` releases.
 
-```bash
-npm install hey-api-playwright hey-api-builders --save-dev
+## Migration
+
+Remove the deprecated package and install the maintained stack:
+
+```sh
+npm uninstall hey-api-playwright
+npm install --save-dev @faker-js/faker @hey-api/openapi-ts @msw/playwright @playwright/test msw
 ```
 
-### Peer Dependencies
+Generate TypeScript types, Faker factories, and MSW handlers:
 
-Ensure you have the following installed:
-
-- `@hey-api/openapi-ts` >= 0.61.0
-- `@playwright/test` >= 1.40.0
-
-## Configuration
-
-Add the plugin to your `openapi-ts.config.ts`. You must also include `hey-api-builders` as it powers the data generation.
-
-```typescript
+```ts
+// openapi-ts.config.ts
 import { defineConfig } from '@hey-api/openapi-ts';
-import playwrightPlugin from 'hey-api-playwright';
-import { buildersPlugin } from 'hey-api-builders';
 
 export default defineConfig({
   input: './openapi.yaml',
   output: './src/generated',
   plugins: [
     '@hey-api/typescript',
-    buildersPlugin({
-      schema: './src/generated/schemas.ts' // Optional: if using schema references
-    }),
-    playwrightPlugin({
-      generateBuilders: true,
-      generateErrorMocks: true,
-    }),
+    {
+      name: '@faker-js/faker',
+      maxCallDepth: 3,
+    },
+    'msw',
   ],
 });
 ```
 
-### Options
+Create the default handlers using the generated Faker response factories:
 
-| Option | Type | Default | Description |
-| :--- | :--- | :--- | :--- |
-| `output` | `string` | `'playwright-mocks'` | Path to the generated output file relative to the `output` directory. |
-| `generateBuilders` | `boolean` | `true` | Whether to generate fluent builder classes. |
-| `generateErrorMocks` | `boolean` | `true` | Whether to generate mocks for error responses (e.g. 4xx, 5xx). |
-| `generateMsw` | `boolean` | `false` | Whether to generate MSW handlers. |
-| `baseUrlPattern` | `string` | `'**/api/**'` | The default glob pattern used to match API routes. |
-| `mockStrategy` | `'static' \| 'zod'` | `'static'` | Strategy for generating mock data. `'static'` uses pre-generated fixtures, `'zod'` generates data at runtime using Zod schemas (requires `zod` dependency). |
+```ts
+// tests/api-handlers.ts
+import { fakeGetPetResponse200 } from '../src/generated/@faker-js/faker.gen';
+import { createMswHandlers } from '../src/generated/msw.gen';
 
-Run the generator:
+const api = createMswHandlers({ baseUrl: 'http://localhost:3000/api' });
 
-```bash
-npx openapi-ts
+export const handlers = [
+  api.pick.getPet({
+    body: fakeGetPetResponse200(),
+    status: 200,
+  }),
+];
 ```
 
-This will produce a `playwright-mocks.gen.ts` file in your output directory.
+Expose them to Playwright through an automatic network fixture:
 
-## Usage
-
-### 1. Basic Route Mocking
-
-For simple tests where you just need the API to return a valid 200 OK response with default data:
-
-```typescript
-import { test, expect } from '@playwright/test';
-import { mockViewUsers, mockCreateUser } from './generated/playwright-mocks.gen';
-
-test('renders user list', async ({ page }) => {
-  // Mocks GET /users with default generated data matching the schema
-  await mockViewUsers(page);
-  
-  await page.goto('/users');
-  await expect(page.getByRole('list')).toBeVisible();
-});
-```
-
-### 2. Fluent Builders (Recommended)
-
-For more complex scenarios where you need specific data states, use the generated Mock classes with the Builder pattern. This allows you to override specific fields while keeping the rest compliant with the schema.
-
-```typescript
-import { test, expect } from '@playwright/test';
-import { ViewUsersMock } from './generated/playwright-mocks.gen';
-
-test('renders specific users', async ({ page }) => {
-  // Override specific fields, rest are auto-generated
-  await new ViewUsersMock()
-    .with({
-      items: [
-        { id: 'user-123', name: 'Alice', role: 'ADMIN' },
-        { id: 'user-456', name: 'Bob', role: 'USER' }
-      ],
-      meta: { total: 2 }
-    })
-    .apply(page); // Applies the route handler
-    
-  await page.goto('/users');
-  await expect(page.getByText('Alice')).toBeVisible();
-  await expect(page.getByText('Bob')).toBeVisible();
-});
-```
-
-### 3. Pattern Matching
-
-By default, mocks match the path defined in OpenAPI using a regex that allows query parameters. You can override the matching logic (e.g., to be more strict) when applying the mock.
-
-```typescript
-// Match strict URL
-await new ViewUsersMock().apply(page, '**/api/v1/users');
-
-// Match custom Regex
-await new ViewUsersMock().apply(page, /.*\/api\/v1\/users(\?.*)?$/);
-```
-
-### 4. Conditional Mocking
-You can pass an optional `matcher` function to dynamically determine if a request should be mocked. This is useful for conditional logic, such as returning different responses based on query parameters.
-
-```typescript
-import { mockSearchCollections } from './generated/playwright-mocks.gen';
-
-// Mock specific search query
-await mockSearchCollections(page, {
-  items: [itemA]
-}, {
-  matcher: (request) => request.url().includes('q=termA')
-});
-
-// Mock another search query
-await mockSearchCollections(page, {
-  items: [itemB]
-}, {
-  matcher: (request) => request.url().includes('q=termB')
-});
-```
-
-### 5. Global Fixtures
-
-You can combine these with Playwright's `test` fixtures to set up common mocks for all tests.
-
-```typescript
-// fixtures.ts
+```ts
+// tests/fixtures.ts
 import { test as base } from '@playwright/test';
-import { ViewMeMock } from './generated/playwright-mocks.gen';
+import { defineNetworkFixture, type NetworkFixture } from '@msw/playwright';
+import type { AnyHandler } from 'msw';
 
-export const test = base.extend({
-  page: async ({ page }, use) => {
-    // Gloablly mock the "Get Current User" endpoint
-    await new ViewMeMock()
-      .with({ id: 'test-user', email: 'test@example.com' })
-      .apply(page);
-      
-    await use(page);
-  },
+import { handlers } from './api-handlers';
+
+type Fixtures = {
+  handlers: Array<AnyHandler>;
+  network: NetworkFixture;
+};
+
+export const test = base.extend<Fixtures>({
+  handlers: [handlers, { option: true }],
+  network: [
+    async ({ context, handlers }, use) => {
+      const network = defineNetworkFixture({ context, handlers });
+      await network.enable();
+      await use(network);
+      await network.disable();
+    },
+    { auto: true },
+  ],
+});
+
+export { expect } from '@playwright/test';
+```
+
+Per-test overrides use the same generated, typed handler factory:
+
+```ts
+import { fakeGetPetResponse200 } from '../src/generated/@faker-js/faker.gen';
+import { createMswHandlers } from '../src/generated/msw.gen';
+import { expect, test } from './fixtures';
+
+test('shows a named pet', async ({ network, page }) => {
+  network.use(
+    createMswHandlers({ baseUrl: 'http://localhost:3000/api' }).pick.getPet({
+      body: fakeGetPetResponse200({ useDefault: true }),
+    }),
+  );
+
+  await page.goto('/pets/1');
+  await expect(page).toHaveURL(/pets/);
 });
 ```
 
-### 6. MSW Integration
+The generated factory names reflect your own operation IDs and status codes. See the
+[Hey API Faker documentation](https://heyapi.dev/docs/openapi/typescript/plugins/faker),
+[Hey API MSW documentation](https://heyapi.dev/docs/openapi/typescript/plugins/msw), and
+[`@msw/playwright` usage guide](https://github.com/mswjs/playwright#usage) for the maintained APIs.
 
-You can also generate [MSW](https://mswjs.io/) handlers for use in component tests (e.g. Vitest, Jest).
+## Historical source
 
-Enable it in your config:
-
-```typescript
-// openapi-ts.config.ts
-export default defineConfig({
-  plugins: [
-    playwrightPlugin({
-      generateMsw: true
-    })
-  ]
-});
-```
-
-This will generate `mswMock*` functions that wrap `http.get`, `http.post`, etc.
-
-```typescript
-import { setupServer } from 'msw/node';
-import { mswMockGetUsers } from './generated/playwright-mocks.gen';
-
-const server = setupServer(
-  // mock with default data
-  mswMockGetUsers(),
-    
-  // or override data
-  mswMockGetUsers((defaults) => ({
-    ...defaults,
-    items: []
-  }))
-);
-```
-
-## How It Works
-
-1. **Schema Parsing**: Parses your OpenAPI spec to understand all available operations and data models.
-2. **Builder Generation**: Uses `hey-api-builders` to create `Builder` classes for every response schema. These builders can generate valid mock data instantly.
-3. **Route Generation**: Creates `Mock` classes that wrap Playwright's `page.route()`.
-4. **Runtime Validation**: When you call `.with()`, TypeScript ensures you only pass valid fields. The underlying Zod schemas ensure the final response is valid.
+The source remains in this repository for auditability. The final published version was `0.3.0`.
+No new npm version is planned.
 
 ## License
 
